@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>RatWAF - 安全监控面板</title>
+    <link rel="icon" href="data:,">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #444444;
+            color: #e5e5e5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶部导航 黑金 */
+        .header {
+            background-color: #343434;
+            height: 65px;
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            border-bottom: 1px solid #d4af37;
+            box-shadow: 0 2px 12px rgba(76, 76, 76, 0.15);
+            z-index: 10;
+        }
+
+        .logo {
+            font-size: 22px;
+            font-weight: bold;
+            color: #d4af37;
+            margin-right: 40px;
+        }
+
+        .nav-item {
+            color: #aaa;
+            margin-right: 28px;
+            font-size: 15px;
+            cursor: pointer;
+            transition: 0.25s;
+        }
+
+        .nav-item:hover {
+            color: #f0c860;
+        }
+
+        /* 主体布局 */
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* 侧边栏 哑光黑 */
+        .sidebar {
+            width: 240px;
+            background-color: #333333;
+            padding: 20px 0;
+            border-right: 1px solid #d4af37;
+        }
+
+        .side-item {
+            padding: 14px 24px;
+            cursor: pointer;
+            transition: 0.25s;
+            font-size: 15px;
+            color: #bbb;
+        }
+
+        .side-item:hover {
+            background-color: #333333;
+            color: #f0c860;
+        }
+
+        .side-item.active {
+            background-color: #333333;
+            color: #d4af37;
+            border-left: 3px solid #d4af37;
+        }
+
+        /* 内容区域 */
+        .content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            background-color: #262626;
+        }
+
+        .title {
+            font-size: 24px;
+            margin-bottom: 24px;
+            color: #f0c860;
+        }
+
+        /* 日志卡片 黑金磨砂 */
+        .log-card {
+            background: #121212;
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 14px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            cursor: pointer;
+            transition: 0.25s;
+            border: 1px solid #222;
+        }
+
+        .log-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(212, 175, 55, 0.2);
+            border-color: #d4af37;
+        }
+
+        .line {
+            margin: 6px 0;
+            font-size: 15px;
+        }
+
+        .ip {
+            color: #ff6b6b;
+            font-weight: 600;
+        }
+
+        .url {
+            color: #f0c860;
+        }
+
+        .time {
+            color: #777;
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 顶部导航 -->
+    <div class="header">
+        <div class="logo">🐀 RatWAF</div>
+        <div class="nav-item">首页</div>
+        <div class="nav-item">攻击日志</div>
+        <div class="nav-item">防御规则</div>
+        <div class="nav-item">系统设置</div>
+    </div>
+
+    <div class="container">
+        <!-- 侧边栏 -->
+        <div class="sidebar">
+            <div class="side-item active">📊 攻击总览</div>
+            <div class="side-item">🧾 日志列表</div>
+            <div class="side-item">🛡️ 拦截规则</div>
+            <div class="side-item">📈 流量统计</div>
+            <div class="side-item">⚙️ 系统配置</div>
+        </div>
+
+        <!-- 主内容 -->
+        <div class="content">
+            <div class="title">最新攻击日志</div>
+
+            <!-- 【修改部分】字段名已同步为最新的 JSON tag -->
+            {{ range .log }}
+            <div class="log-card" onclick="window.location='/detail/{{.ID}}'">
+                <div class="line">攻击类型：<span class="ip">{{.AttackType}}</span></div>
+                <div class="line">攻击者IP：<span class="ip">{{.AttackerIP}}</span></div>
+                <div class="line">攻击路径：<span class="url"
+                        style="word-break: break-all; white-space: normal; line-height: 1.4;">{{.Remote}}</span></div>
+                <div class="line time">记录时间：{{.Createtime}}</div>
+            </div>
+            {{ end }}
+        </div>
+    </div>
+</body>
+
+</html>

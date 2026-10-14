@@ -1,0 +1,207 @@
+//go:build linux
+// +build linux
+
+package proxy
+
+import (
+	"RatWAF_v2/global"
+	"RatWAF_v2/utils"
+	"context"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"log"
+	"strconv"
+	"strings"
+
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
+	"github.com/google/gopacket/pcap"
+)
+
+var (
+	iface = flag.String("i", "lo", "要监听的网络接口")
+	port  = flag.Int("p", 8080, "要监听的端口 (默认为 8080)")
+)
+
+type AttackLog struct {
+	AttackerIP string `json:"attacker_ip"`
+	Method     string `json:"method"`
+	Body       string `json:"body"`
+	Request    string `json:"request"`
+	attackType string
+}
+
+func ListenInterface(iface string) (*gopacket.PacketSource, func(), error) {
+	pcapHandle, err := pcap.OpenLive(iface, 65536, true, pcap.BlockForever)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	filter := "tcp port " + strconv.Itoa(*port)
+	log.Printf("正在设置过滤器: %s", filter)
+	if err := pcapHandle.SetBPFFilter(filter); err != nil {
+		pcapHandle.Close()
+		return nil, nil, err
+	}
+
+	linkType := pcapHandle.LinkType()
+	packetSource := gopacket.NewPacketSource(pcapHandle, linkType)
+
+	cleanup := func() {
+		pcapHandle.Close()
+	}
+
+	return packetSource, cleanup, nil
+}
+
+func Reverse() {
+	flag.Parse()
+
+	log.Printf("正在监听网卡 %s 上的 HTTP 流量 (端口: %d)...\n", *iface, *port)
+
+	packetSource, cleanup, err := ListenInterface(*iface)
+	if err != nil {
+		log.Fatalf("无法监听网卡 %s: %v", *iface, err)
+	}
+	defer cleanup()
+
+	httpMethods := map[string]bool{
+		"GET":     true,
+		"POST":    true,
+		"PUT":     true,
+		"DELETE":  true,
+		"HEAD":    true,
+		"OPTIONS": true,
+		"PATCH":   true,
+		"CONNECT": true,
+		"TRACE":   true,
+	}
+
+	for packet := range packetSource.Packets() {
+		var srcIP string
+
+		if ipLayer := packet.Layer(layers.LayerTypeIPv4); ipLayer != nil {
+			if ip, ok := ipLayer.(*layers.IPv4); ok {
+				srcIP = ip.SrcIP.String()
+			}
+		} else if ipLayer := packet.Layer(layers.LayerTypeIPv6); ipLayer != nil {
+			if ip, ok := ipLayer.(*layers.IPv6); ok {
+				srcIP = ip.SrcIP.String()
+			}
+		}
+
+		if srcIP == "" {
+			continue
+		}
+
+		tcpLayer := packet.Layer(layers.LayerTypeTCP)
+		if tcpLayer == nil {
+			continue
+		}
+		tcp, ok := tcpLayer.(*layers.TCP)
+		if !ok {
+			continue
+		}
+
+		payload := string(tcp.Payload)
+		if payload == "" {
+			continue
+		}
+
+		// --- 以下是修改的部分 ---
+
+		// 1. 首先按 "\r\n\r\n" 分割，分离头部和主体
+		headerBodySplit := strings.SplitN(payload, "\r\n\r\n", 2)
+
+		// 安全获取 headersPart，避免索引越界
+		headersPart := ""
+		if len(headerBodySplit) > 0 {
+			headersPart = headerBodySplit[0]
+		}
+
+		// 安全获取 bodyContent，如果分割后长度不足则为空字符串
+		bodyContent := ""
+		if len(headerBodySplit) > 1 {
+			bodyContent = headerBodySplit[1]
+		}
+
+		// 2. 从 headersPart 中分离出请求行和头部字符串
+		lines := strings.SplitN(headersPart, "\r\n", 2)
+
+		// 安全获取 requestLine
+		requestLine := ""
+		if len(lines) > 0 {
+			requestLine = lines[0]
+		}
+
+		// 安全获取 headersString
+		headersString := ""
+		if len(lines) > 1 {
+			headersString = lines[1]
+		}
+
+		// 3. 提取 Method
+		parts := strings.SplitN(requestLine, " ", 2)
+		method := ""
+		if len(parts) > 0 {
+			method = strings.ToUpper(parts[0])
+		}
+
+		if !httpMethods[method] {
+			continue
+		}
+
+		// 4. 组装新的 Body 字段 (将 headersString 和 bodyContent 合并)
+		fullBodyDetail := headersString
+		if bodyContent != "" {
+			fullBodyDetail += "\r\n\r\n" + bodyContent
+		}
+
+		// --- 修改结束 ---
+
+		logEntry := AttackLog{
+			AttackerIP: srcIP,
+			Method:     method,
+			Request:    requestLine,
+			Body:       fullBodyDetail,
+		}
+		ctx := context.Background()
+		if jsonData, err := json.Marshal(logEntry); err == nil {
+			//fmt.Println(string(jsonData))
+			isAttack, attackType := utils.CheckReq(string(jsonData))
+			if isAttack {
+				logEntry.attackType = attackType
+				jsonData, err = json.Marshal(logEntry)
+				if err == nil {
+					err = global.RDB.LPush(ctx, "http_attack_log", string(jsonData)).Err()
+					if err != nil {
+						log.Printf("写入数据失败: %v", err)
+					}
+				} else {
+					log.Printf("JSON1 序列化失败: %v", err)
+				}
+			}
+		} else {
+			log.Printf("JSON2 序列化失败: %v", err)
+		}
+	}
+}
+func saveAttackLog(entry AttackLog) error {
+	ctx := context.Background()
+	jsonData, err := json.Marshal(entry)
+	if err != nil {
+		return fmt.Errorf("marshal log failed: %w", err)
+	}
+	return global.RDB.LPush(ctx, "http_attack_log", string(jsonData)).Err()
+}
+
+//{"attacker_ip":"192.168.2.16","method":"GET","body":"Host: 1
+// 92.168.2.50:8080\r\nConnection: keep-alive\r\nCache-Control: max-a
+// ge=0\r\nUpgrade-Insecure-Requests: 1\r\nUser-Agent: Mozilla/5.0 (Linux;
+// Android 16; 2410CRP4CC Build/BP2A.250605.031.A3) AppleWebKit/537.36 (KHTML, l
+// ike Gecko) Chrome/147.0.7727.112 Safari/537.36\r\nAccept: text/html,application/
+// xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,applicati
+// on/signed-exchange;v=b3;q=0.7\r\ndnt: 1\r\nX-Requested-With: mark.via\r\nAccept-Encodi
+// ng: gzip, deflate\r\nAccept-Language: zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7","request":"
+// GET /user?id=1%20or%201=1 HTTP/1.1"}

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>日志详情</title>
+    <link rel="icon" href="data:,">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        body {
+            background-color: #333333;
+            color: #e5e5e5;
+            padding: 40px;
+        }
+
+        .back {
+            color: #d4af37;
+            font-size: 16px;
+            text-decoration: none;
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+
+        .card {
+            background: #333333;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+            border: 1px solid #d4af37;
+        }
+
+        h2 {
+            color: #f0c860;
+            margin-bottom: 20px;
+        }
+
+        .item {
+            margin: 14px 0;
+            font-size: 16px;
+        }
+
+        .label {
+            color: #888;
+            display: inline-block;
+            width: 110px;
+        }
+
+        .value {
+            color: #eee;
+        }
+
+        .ip {
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+
+        .url {
+            color: #f0c860;
+        }
+
+        .req-box {
+            background: #333333;
+            padding: 18px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border: 1px solid #333333;
+        }
+
+        pre {
+            color: #ccc;
+            font-size: 14px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+    <a href="/index" class="back">返回列表</a>
+
+    <div class="card">
+        <h2>攻击日志详情 #{{.log.ID}}</h2>
+
+        <!-- ???????? -->
+        <!-- <div class="item">
+            <span class="label">攻击类型</span>
+            <span class="value ip">{{.log.AttackType}}</span>
+        </div> -->
+        <div class="item">
+            <span class="item">攻击类型:</span>
+            <span class="ip" style="word-break: break-all; white-space: normal;">{{.log.AttackType}}</span>
+        </div>
+        <div class="item">
+            <span class="label">攻击路径:</span>
+            <span class="value url" style="word-break: break-all; white-space: normal;">{{.log.Remote}}</span>
+        </div>
+
+        <div class="item">
+            <span class="label">攻击时间</span>
+            <span class="value">{{.log.Createtime}}</span>
+        </div>
+
+        <div class="req-box">
+            <pre>{{.log.Body}}</pre>
+        </div>
+    </div>
+</body>
+
+</html>
